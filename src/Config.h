@@ -2,7 +2,7 @@
 #define CONFIG_H
 
 // Firmware Version definition for Web UI / Firebase tracking
-#define FIRMWARE_VERSION "1.01"
+#define FIRMWARE_VERSION "1.03"
 
 // Wi-Fi credentials.
 #define WIFI_SSID "SLT-4G_164B2A"
