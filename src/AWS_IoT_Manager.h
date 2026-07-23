@@ -1,18 +1,19 @@
-#ifndef OTA_MANAGER_H
-#define OTA_MANAGER_H
+#ifndef AWS_IOT_MANAGER_H
+#define AWS_IOT_MANAGER_H
 
 #include <WiFiClientSecure.h>
+#include <PubSubClient.h>
 #include <HTTPClient.h>
 #include <Update.h>
+#include "AWS_Secrets.h"
+
+WiFiClientSecure net;
+PubSubClient mqttClient(net);
 
 // main.cpp එකේ තියෙන Firebase ලොග් යවන ෆන්ක්ෂන් එක මෙතැනට අරගන්නවා
 extern void sendLogToDashboard(String message);
 
-void setupOTA() {
-    // Local OTA අවශ්‍ය නම් මෙහි තැබිය හැක
-}
-
-// S3 ලින්ක් එකෙන් ඩවුන්ලෝඩ් කරමින්, සියලුම Logs Firebase එකට යවන ප්‍රධාන ෆන්ක්ෂන් එක
+// ✨ S3 ලින්ක් එකෙන් ඩවුන්ලෝඩ් කරමින්, Rollback පහසුකම සහ Firebase ලොග් සහිත OTA ෆන්ක්ෂන් එක
 void performOTAUpdate(String url) {
     Serial.println("🚀 Connecting to S3 to download firmware...");
     sendLogToDashboard("Connecting to S3 to download firmware...");
@@ -30,13 +31,11 @@ void performOTAUpdate(String url) {
             Serial.printf("📦 Firmware size: %d bytes\n", contentLength);
             sendLogToDashboard("Firmware size: " + String(contentLength) + " bytes");
 
-            // OTA ප්‍රමාණය පරීක්ෂා කර Update එක ආරම්භ කිරීම
             bool canBegin = Update.begin(contentLength);
             if (canBegin) {
                 Serial.println("🔄 Beginning OTA update. Please wait...");
                 sendLogToDashboard("Beginning OTA update. Please wait...");
                 
-                // ඩවුන්ලෝඩ් වෙමින් පවතියි
                 size_t written = Update.writeStream(http.getStream());
 
                 if (written == contentLength) {
@@ -58,7 +57,7 @@ void performOTAUpdate(String url) {
                         sendLogToDashboard("Error: OTA not finished properly.");
                     }
                 } else {
-                    // **✨ Rollback Mechanism:** අවුලක් වුණොත් පරණ කේතයම තබා ගනියි.
+                    // ✨ Rollback Mechanism: අවුලක් වුණොත් පරණ කේතයම තබා ගනියි
                     String errNum = String(Update.getError());
                     Serial.printf("❌ Error Occurred. Error #: %s\n", errNum.c_str());
                     Serial.println("🛡️ Rolling back to previous stable firmware...");
@@ -82,8 +81,60 @@ void performOTAUpdate(String url) {
     http.end();
 }
 
-void handleOTA() {
-    // අවශ්‍ය නම් මෙහි වෙනත් Background tasks දැමිය හැක
+// AWS IoT Core එකෙන් මැසේජ් එකක් ආවම ක්‍රියාත්මක වන Callback එක
+void mqttCallback(char* topic, byte* payload, unsigned int length) {
+    Serial.print("🔔 AWS IoT Alert! Message arrived on topic: ");
+    Serial.println(topic);
+    
+    sendLogToDashboard("AWS IoT Alert! Message arrived"); 
+
+    String message = "";
+    for (int i = 0; i < length; i++) {
+        message += (char)payload[i];
+    }
+    Serial.println("Message Content: " + message);
+
+    // Topic එක අපේ OTA Topic එක නම් S3 ලින්ක් එක අරන් Update එක පටන් ගන්නවා
+    if(String(topic) == AWS_IOT_TOPIC) {
+        Serial.println("🚀 Starting OTA Update from AWS S3...");
+        sendLogToDashboard("Starting OTA Update from AWS S3..."); 
+        
+        String s3_url = message; 
+        performOTAUpdate(s3_url); 
+    }
+}
+
+void connectAWS() {
+    Serial.println("Connecting to AWS IoT Core...");
+    sendLogToDashboard("Connecting to AWS IoT Core..."); 
+
+    net.setCACert(AWS_CERT_CA);
+    net.setCertificate(AWS_CERT_CRT);
+    net.setPrivateKey(AWS_CERT_PRIVATE);
+
+    mqttClient.setServer(AWS_IOT_ENDPOINT, 8883);
+    mqttClient.setCallback(mqttCallback);
+
+    while (!mqttClient.connect("AetherFlash_ESP32")) {
+        Serial.print(".");
+        delay(1000);
+    }
+
+    if (mqttClient.connected()) {
+        Serial.println("\n✅ AWS IoT Connected Successfully!");
+        sendLogToDashboard("AWS IoT Connected Successfully!"); 
+        
+        mqttClient.subscribe(AWS_IOT_TOPIC);
+        Serial.println("📡 Subscribed to OTA Topic: " AWS_IOT_TOPIC);
+        sendLogToDashboard("Subscribed to OTA Topic"); 
+    } else {
+        Serial.println("\n❌ AWS IoT Connection Failed!");
+        sendLogToDashboard("AWS IoT Connection Failed!"); 
+    }
+}
+
+void handleAWS() {
+    mqttClient.loop();
 }
 
 #endif

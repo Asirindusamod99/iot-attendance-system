@@ -47,7 +47,7 @@ void setup() {
 
     setupHardware();
     setupRFID();
-     pinMode(2, OUTPUT);
+    pinMode(2, OUTPUT);
     Serial.print("Connecting to WiFi");
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     while (WiFi.status() != WL_CONNECTED) {
@@ -75,6 +75,7 @@ void loop() {
     handleOTA(); 
     handleAWS();
     digitalWrite(2, HIGH);  
+
     // Relay control
     if (Firebase.getString(fbData, "/MachineControl/" MACHINE_ID "/Relay1")) controlRelay(1, fbData.stringData() == "ON");
     if (Firebase.getString(fbData, "/MachineControl/" MACHINE_ID "/Relay2")) controlRelay(2, fbData.stringData() == "ON");
@@ -132,13 +133,11 @@ void loop() {
             // Worker flow: toggle between IN and OUT.
             else {
                 if (currentStatus == "OUT" || currentStatus == "") {
-                    // First scan marks arrival (IN).
                     log.set("action", "IN");
                     Firebase.setString(fbData, "/ActiveSessions/" + scannedID + "/status", "IN");
                     Firebase.setString(fbData, "/ActiveSessions/" + scannedID + "/inTime", scanTime);
                     Serial.println("Worker " + name + " Marked: IN at " + scanTime);
                 } else {
-                    // Second scan marks departure (OUT).
                     log.set("action", "OUT");
                     Firebase.setString(fbData, "/ActiveSessions/" + scannedID + "/status", "OUT");
                     Firebase.setString(fbData, "/ActiveSessions/" + scannedID + "/outTime", scanTime);
@@ -146,16 +145,13 @@ void loop() {
                 }
             }
             
-            // Send the event to the web UI logs.
             Firebase.pushJSON(fbData, "/MachineLogs", log);
-            
         } 
-        // Handle an unregistered card.
         else {
             Serial.println("New Card Detected! Sending to Web UI...");
             Firebase.setString(fbData, "/MachineStatus/" MACHINE_ID "/LastUnknownCard", scannedID);
         }
         
-        delay(2000); // Prevent the card from being read twice in a row.
+        delay(2000); 
     }
 }
