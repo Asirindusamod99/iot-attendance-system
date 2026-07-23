@@ -34,7 +34,7 @@ void controlRelay(int relayNum, bool state) {
     if(relayNum == 2) pin = RELAY_2;
     if(relayNum == 3) pin = RELAY_3;
     if(relayNum == 4) pin = RELAY_4;
-    
+
     digitalWrite(pin, state ? HIGH : LOW);
 }
 

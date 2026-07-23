@@ -8,13 +8,14 @@
 #include "Sensors.h"
 #include "RFID_Logic.h"
 #include "OTA_Handler.h"
+#include "OTA_Manager.h" // 👈 අනිවාර්යයෙන්ම AWS_IoT_Manager.h එකට උඩින් මෙය තියෙන්න ඕනේ!
 
 FirebaseData fbData;
 FirebaseAuth auth;
 FirebaseConfig config;
 
 unsigned long lastSensorUpdate = 0;
-bool isMaintenanceMode = false; 
+bool isMaintenanceMode = false;
 
 // Sends system logs to the Firebase dashboard.
 void sendLogToDashboard(String message) {
@@ -22,8 +23,7 @@ void sendLogToDashboard(String message) {
     json.set("action", "SYSTEM");
     json.set("name", message);
     json.set("role", "AetherFlash OTA");
-    
-    // Push the log payload using FirebaseESP32.
+
     if (Firebase.pushJSON(fbData, "/MachineLogs", json)) {
         Serial.println("✅ Log sent to Dashboard");
     } else {
@@ -31,7 +31,7 @@ void sendLogToDashboard(String message) {
     }
 }
 
-// Include AWS IoT support after the dashboard logger is defined.
+// Include AWS IoT support after OTA_Manager and logger are defined.
 #include "AWS_IoT_Manager.h"
 
 String getCurrentTime() {
@@ -64,20 +64,30 @@ void setup() {
     Firebase.begin(&config, &auth);
     Firebase.reconnectWiFi(true);
 
-    // Machine State සහ Firmware Version එක Firebase වෙත යැවීම
-    Firebase.setString(fbData, "/MachineStatus/" MACHINE_ID "/State", "IDLE");
+    // Sync local isMaintenanceMode with whatever Firebase last had, so a
+    // reboot mid-maintenance (e.g. after an OTA update) doesn't desync the
+    // device's local flag from the dashboard's reported state.
+    if (Firebase.getString(fbData, "/MachineStatus/" MACHINE_ID "/State")) {
+        String lastState = fbData.stringData();
+        isMaintenanceMode = (lastState == "MAINTENANCE");
+        Serial.println("🔄 Synced maintenance state from Firebase: " + lastState);
+    } else {
+        // No previous state on record - report IDLE as before.
+        Firebase.setString(fbData, "/MachineStatus/" MACHINE_ID "/State", "IDLE");
+    }
+
     Firebase.setString(fbData, "/MachineStatus/" MACHINE_ID "/FirmwareVersion", FIRMWARE_VERSION);
     Serial.println("📌 Current Firmware Version Reported to Firebase: " + String(FIRMWARE_VERSION));
-    
+
     // Connect to AWS IoT Core.
     connectAWS();
     Serial.println("System Ready!");
 }
 
 void loop() {
-    handleOTA(); 
+    handleOTA();
     handleAWS();
-    digitalWrite(2, HIGH);  
+    digitalWrite(2, HIGH);
 
     // Relay control
     if (Firebase.getString(fbData, "/MachineControl/" MACHINE_ID "/Relay1")) controlRelay(1, fbData.stringData() == "ON");
@@ -99,16 +109,14 @@ void loop() {
     if (scannedID != "") {
         Serial.println("\nCard Scanned: " + scannedID);
 
-        // Check whether the card exists in the root of the database.
         if (Firebase.getString(fbData, "/" + scannedID + "/name")) {
-            String name = fbData.stringData(); 
+            String name = fbData.stringData();
             Firebase.getString(fbData, "/" + scannedID + "/role");
-            String role = fbData.stringData(); 
-            
+            String role = fbData.stringData();
+
             String scanTime = getCurrentTime();
 
-            // Check whether the worker is currently marked as IN.
-            String currentStatus = "OUT"; 
+            String currentStatus = "OUT";
             if (Firebase.getString(fbData, "/ActiveSessions/" + scannedID + "/status")) {
                 currentStatus = fbData.stringData();
             }
@@ -119,7 +127,6 @@ void loop() {
             log.set("role", role);
             log.set("timestamp", scanTime);
 
-            // Technician flow
             if (role == "Technician") {
                 if (!isMaintenanceMode) {
                     isMaintenanceMode = true;
@@ -132,8 +139,7 @@ void loop() {
                     Firebase.setString(fbData, "/MachineStatus/" MACHINE_ID "/State", "IDLE");
                     Serial.println("Technician " + name + " ENDED Maintenance.");
                 }
-            } 
-            // Worker flow: toggle between IN and OUT.
+            }
             else {
                 if (currentStatus == "OUT" || currentStatus == "") {
                     log.set("action", "IN");
@@ -147,17 +153,14 @@ void loop() {
                     Serial.println("Worker " + name + " Marked: OUT at " + scanTime);
                 }
             }
-            
-            // Send the event to the web UI logs.
+
             Firebase.pushJSON(fbData, "/MachineLogs", log);
-            
-        } 
-        // Handle an unregistered card.
+        }
         else {
             Serial.println("New Card Detected! Sending to Web UI...");
             Firebase.setString(fbData, "/MachineStatus/" MACHINE_ID "/LastUnknownCard", scannedID);
         }
-        
-        delay(2000); // Prevent the card from being read twice in a row.
+
+        delay(2000);
     }
 }

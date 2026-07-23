@@ -3,13 +3,18 @@
 
 #include <pgmspace.h>
 
+// ⚠️ Your original certificate/key were exposed in this chat's uploaded
+// files. Treat them as compromised: revoke the old certificate in AWS IoT
+// Core, generate a NEW certificate/key pair, and paste the new values below.
+// Do not commit this file to a public repo — add it to .gitignore.
+
 // AWS IoT endpoint URL.
 #define AWS_IOT_ENDPOINT "a1inq1bmjtvthc-ats.iot.us-east-1.amazonaws.com"
 
 // MQTT topic used for OTA update commands.
-#define AWS_IOT_TOPIC "aetherflash/device/Machine_01/ota" 
+#define AWS_IOT_TOPIC "aetherflash/device/Machine_01/ota"
 
-// Amazon Root CA 1 certificate.
+// Amazon Root CA 1 certificate. (This one is public/static — safe to keep.)
 static const char AWS_CERT_CA[] PROGMEM = R"EOF(
 -----BEGIN CERTIFICATE-----
 MIIDQTCCAimgAwIBAgITBmyfz5m/jAo54vB4ikPmljZbyjANBgkqhkiG9w0BAQsF
@@ -34,57 +39,18 @@ rqXRfboQnoZsG4q5WTP468SQvvG5
 )EOF";
 
 // Device certificate.
+// ⚠️ REPLACE with a NEW certificate generated after revoking the old one.
 static const char AWS_CERT_CRT[] PROGMEM = R"EOF(
 -----BEGIN CERTIFICATE-----
-MIIDWTCCAkGgAwIBAgIUUw/tJiwIJw7Z6bhvSQbkWMSuBsgwDQYJKoZIhvcNAQEL
-BQAwTTFLMEkGA1UECwxCQW1hem9uIFdlYiBTZXJ2aWNlcyBPPUFtYXpvbi5jb20g
-SW5jLiBMPVNlYXR0bGUgU1Q9V2FzaGluZ3RvbiBDPVVTMB4XDTI2MDcyMjE1NDEw
-MVoXDTQ5MTIzMTIzNTk1OVowHjEcMBoGA1UEAwwTQVdTIElvVCBDZXJ0aWZpY2F0
-ZTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAKcZO8caNBsH6vcnGKr8
-/0PtdDMfG4G8Yl6P6NNOsj/aDje1cPh5RLw6GKaadG2qCb8+OR9AwGQMgjDOuDua
-LR5n/yH4OpzxBSg49YSUUWflM232PdYSxqP2qlB69rd6mLnSe4WYlDpTZ5DaAk70
-mgQMMMmI7FA8jjMKrC0jbvV9zQm+P0ILRP4C0URrJDZL+5obVrqI1vdkfAMWUOF7
-hs/pPahpnpQacJ/jFFHvbPlVXj8LBFnOU4YUWxHLaTt9j4cDOhS7fnjXzRxZ9DMR
-VsGmtl612BdNKFDgO3fYMxKslXPnShxLnWwEMDvu0Sj/EzqwTbwrBVlWpeWKbV44
-4M0CAwEAAaNgMF4wHwYDVR0jBBgwFoAUvnvxuc4TEH8uLtNBBuVkaue0CRYwHQYD
-VR0OBBYEFHuXcYQoNVFseschtLgtKLCQoBrCMAwGA1UdEwEB/wQCMAAwDgYDVR0P
-AQH/BAQDAgeAMA0GCSqGSIb3DQEBCwUAA4IBAQBSxnLmX1pfM8W9/YsLNnkJaTDP
-ejeiayoHIHtf58shh871keWgpAXhQnL0PgwOD9yxzrPXSggIHDCNugX9qNMR8x4e
-FKF7Dy/aZ8cqrS2FrugJ7VvKBdGs5mKsuUi24L2LDuVtgK1kNtcfKoKSGUOc/dV+
-OsfQTnCsAvhO9jKGljXbkfq12efMi8HPp03/bkWKCXzRgnC7YxKIk/GGQKpCwvcb
-V5YdI5O5NjLzytiuDwl2pyavgiEqF0f+4DxupLsI7nTjOEDjXIa+IkEz6pMRuttF
-zOKv2l2v4peq41EfapTRBJ9CnEDH1cfwRvmVobWNZMGV5z4UTCnjKWOHrw+w
+PASTE-YOUR-NEW-DEVICE-CERTIFICATE-HERE
 -----END CERTIFICATE-----
 )EOF";
 
 // Private key.
+// ⚠️ REPLACE with the NEW private key that pairs with the certificate above.
 static const char AWS_CERT_PRIVATE[] PROGMEM = R"EOF(
 -----BEGIN RSA PRIVATE KEY-----
-MIIEowIBAAKCAQEApxk7xxo0Gwfq9ycYqvz/Q+10Mx8bgbxiXo/o006yP9oON7Vw
-+HlEvDoYppp0baoJvz45H0DAZAyCMM64O5otHmf/Ifg6nPEFKDj1hJRRZ+UzbfY9
-1hLGo/aqUHr2t3qYudJ7hZiUOlNnkNoCTvSaBAwwyYjsUDyOMwqsLSNu9X3NCb4/
-QgtE/gLRRGskNkv7mhtWuojW92R8AxZQ4XuGz+k9qGmelBpwn+MUUe9s+VVePwsE
-Wc5ThhRbEctpO32PhwM6FLt+eNfNHFn0MxFWwaa2XrXYF00oUOA7d9gzEqyVc+dK
-HEudbAQwO+7RKP8TOrBNvCsFWVal5YptXjjgzQIDAQABAoIBABpjo8sn2j7Cm1r4
-865dUjr6DzXbnc55X9erRovIi+IFn+UwZGz5Sd+oFSiKkASZq/xl6UOESF4Ek7L9
-kp7nFGUO634D483RSo01oaCUg96yldKx5sYeJPzUAcXABaKoW+JM2XEZzZ8AeQSp
-SWAKxSAKhNHvK9LoHVT2RIbEZ8uhFvgq5rM5TMMOGsJkYNP5F2ZiJo+pvgQmH0CW
-VTH8+YguEnf+hNJGsDNb0W5zg0sinTzx3xhkBlWcQb/DsQD1WROwkpiCHYBIT1RS
-U5XIHb6X0iIdiqa3oVwdIIUltLYt+HyL6Wu+gRT7gyv9v6nmnHpOliYlM7PXp8yH
-ufmJOckCgYEA3htGb03zOCIwc7RWre2Ux6KCH00QDS+AbWSHVLwWA16Aqpsolvss
-NT8i37U4PBN6dYgS4p0mwKdAnXd3YxeWoDoDLQKVjY91l08+82vdx8i/wD6Fz2QY
-AEfhKn8uFStvffmUtu+mRR1PRyxqDeb0XXh+pz8ge8Vbrnod6Yd3vUsCgYEAwJkJ
-+HcWOGHcNt23raF23B+6iPTcIQvOzOhTlBsNq0k/8dT72jcLW26zUvquvPoXDbpn
-lWNWCBIP3F8teAzj9z1Ty1mQMwqU7NHDmCY863YE3zktZKffU5LnG5mt4UHyegGo
-pqxs1NUlyz5LCpmxgj0yLuec0eAUNE+Vtbiyg0cCgYEA1jlCf1qU66B2UTMwo4NS
-jBbfIKeogr89RMXAjeb36Hn+6g7LYIyUgCsMTO8ydSdoZvI/HNnspcbr2LWArk/z
-FUm/BGvIqYgkKDPkCM8SU376C8eCMp1dVO//aojOftatK7lNSgDtwx3Y+FILXKtV
-KM5ugoutnhOmMSxRq4vg3u8CgYAE+zBN086oUKegZ6WbgQSQ9uUdK7ARzrtfg1a+
-CuEUoAVeXNLStv+9MqTCracdTh6QhVSugW41MTplybRkWXj/6P8k0EExgMGPSnGT
-mtGSiW/g0hrBcrIM+Eyv4w6jN9BspWRWQzlhW83pbsgEEyuLIcgNfIIKz4/WNoS5
-uXgsewKBgC+sB+vtcS4SgcIS3vzKmLCJSxwBsfmnz/qyHH78x1lptePoBv3fhdgO
-kLLOl50Bx5wjQsZjPapG49vpQ98zPIpkuUsG0FWGFA5Lzkk9GOYlWWWd1UhYxESz
-kzu6zXQNGQDlDUVH0sn8GbmOsbDeBGgmp2j4SLS6Ydmq22aCw6VQ
+PASTE-YOUR-NEW-PRIVATE-KEY-HERE
 -----END RSA PRIVATE KEY-----
 )EOF";
 

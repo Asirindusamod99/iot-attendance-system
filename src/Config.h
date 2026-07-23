@@ -2,12 +2,15 @@
 #define CONFIG_H
 
 // Firmware Version definition for Web UI / Firebase tracking
-#define FIRMWARE_VERSION "1.04"
+#define FIRMWARE_VERSION "1.02"
 
 // Wi-Fi credentials.
+// ⚠️ TODO: rotate this password and move it out of source control
+// (e.g. a separate untracked header, or ESP32 NVS/Preferences storage).
 #define WIFI_SSID "SLT-4G_164B2A"
 #define WIFI_PASSWORD "B55F9EED"
 
+// ⚠️ TODO: rotate this Firebase secret and move it out of source control.
 #define FIREBASE_HOST "iot-attendance-system-d5008-default-rtdb.asia-southeast1.firebasedatabase.app"
 #define FIREBASE_AUTH "w0VFGOYz7OqMIvEys63lrJj1fFLDIIBn2jQ3CnvF"
 
@@ -16,8 +19,8 @@
 // RFID and sensor pins.
 #define RFID_SS_PIN 5
 #define RFID_RST_PIN 27
-#define PIR_PIN 34        
-#define DHT_PIN 15        
+#define PIR_PIN 34
+#define DHT_PIN 15
 
 // Relay output pins.
 #define RELAY_1 4

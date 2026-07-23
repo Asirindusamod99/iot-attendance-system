@@ -10,130 +10,92 @@
 WiFiClientSecure net;
 PubSubClient mqttClient(net);
 
-// main.cpp එකේ තියෙන Firebase ලොග් යවන ෆන්ක්ෂන් එක මෙතැනට අරගන්නවා
 extern void sendLogToDashboard(String message);
-
-// ✨ S3 ලින්ක් එකෙන් ඩවුන්ලෝඩ් කරමින්, Rollback පහසුකම සහ Firebase ලොග් සහිත OTA ෆන්ක්ෂන් එක
-void performOTAUpdate(String url) {
-    Serial.println("🚀 Connecting to S3 to download firmware...");
-    sendLogToDashboard("Connecting to S3 to download firmware...");
-    
-    WiFiClientSecure client;
-    client.setInsecure(); // SSL Certificate Error මඟහරවා ගැනීමට
-
-    HTTPClient http;
-    http.begin(client, url);
-
-    int httpCode = http.GET();
-    if (httpCode > 0) {
-        if (httpCode == HTTP_CODE_OK) {
-            int contentLength = http.getSize();
-            Serial.printf("📦 Firmware size: %d bytes\n", contentLength);
-            sendLogToDashboard("Firmware size: " + String(contentLength) + " bytes");
-
-            bool canBegin = Update.begin(contentLength);
-            if (canBegin) {
-                Serial.println("🔄 Beginning OTA update. Please wait...");
-                sendLogToDashboard("Beginning OTA update. Please wait...");
-                
-                size_t written = Update.writeStream(http.getStream());
-
-                if (written == contentLength) {
-                    Serial.printf("Written : %d successfully\n", written);
-                } else {
-                    Serial.printf("⚠️ Written only : %d/%d. Retrying...\n", written, contentLength);
-                    sendLogToDashboard("Warning: Partial firmware write (" + String(written) + "/" + String(contentLength) + ")");
-                }
-
-                if (Update.end()) {
-                    Serial.println("✅ OTA completed!");
-                    if (Update.isFinished()) {
-                        Serial.println("🎉 Update successfully completed. Rebooting in 3 seconds...");
-                        sendLogToDashboard("OTA Update Success! Rebooting...");
-                        delay(3000);
-                        ESP.restart(); // සාර්ථක නම් පමණක් Reboot වේ
-                    } else {
-                        Serial.println("❌ Error: OTA not finished properly.");
-                        sendLogToDashboard("Error: OTA not finished properly.");
-                    }
-                } else {
-                    // ✨ Rollback Mechanism: අවුලක් වුණොත් පරණ කේතයම තබා ගනියි
-                    String errNum = String(Update.getError());
-                    Serial.printf("❌ Error Occurred. Error #: %s\n", errNum.c_str());
-                    Serial.println("🛡️ Rolling back to previous stable firmware...");
-                    sendLogToDashboard("OTA Failed (Err: " + errNum + "). Rolling back to stable firmware.");
-                }
-            } else {
-                Serial.println("❌ Not enough space to begin OTA");
-                sendLogToDashboard("OTA Error: Not enough space to begin update.");
-            }
-        } else {
-            String errStr = http.errorToString(httpCode);
-            Serial.printf("❌ HTTP GET failed, error: %s\n", errStr.c_str());
-            sendLogToDashboard("OTA HTTP GET failed: " + errStr);
-        }
-    } else {
-        String errStr = http.errorToString(httpCode);
-        Serial.printf("❌ HTTP connection failed, error: %s\n", errStr.c_str());
-        sendLogToDashboard("OTA HTTP connection failed: " + errStr);
-    }
-
-    http.end();
-}
+extern void performOTAUpdate(String url); // OTA_Manager එකෙන් එන ෆන්ක්ෂන් එක සඳහා external reference
 
 // AWS IoT Core එකෙන් මැසේජ් එකක් ආවම ක්‍රියාත්මක වන Callback එක
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
     Serial.print("🔔 AWS IoT Alert! Message arrived on topic: ");
     Serial.println(topic);
-    
-    sendLogToDashboard("AWS IoT Alert! Message arrived"); 
+
+    sendLogToDashboard("AWS IoT Alert! Message arrived");
 
     String message = "";
-    for (int i = 0; i < length; i++) {
+    for (unsigned int i = 0; i < length; i++) {
         message += (char)payload[i];
     }
-    Serial.println("Message Content: " + message);
 
-    // Topic එක අපේ OTA Topic එක නම් S3 ලින්ක් එක අරන් Update එක පටන් ගන්නවා
+    // ✨ URL එකේ අගින් මුලින් තියෙන අනවශ්‍ය spaces සහ newline characters ඉවත් කිරීම
+    message.trim();
+    Serial.println("Cleaned S3 URL Content: [" + message + "]");
+    Serial.printf("URL length: %d\n", message.length());
+
     if(String(topic) == AWS_IOT_TOPIC) {
         Serial.println("🚀 Starting OTA Update from AWS S3...");
-        sendLogToDashboard("Starting OTA Update from AWS S3..."); 
-        
-        String s3_url = message; 
-        performOTAUpdate(s3_url); 
+        sendLogToDashboard("Starting OTA Update from AWS S3...");
+
+        performOTAUpdate(message);
     }
 }
 
 void connectAWS() {
     Serial.println("Connecting to AWS IoT Core...");
-    sendLogToDashboard("Connecting to AWS IoT Core..."); 
+    sendLogToDashboard("Connecting to AWS IoT Core...");
 
     net.setCACert(AWS_CERT_CA);
     net.setCertificate(AWS_CERT_CRT);
     net.setPrivateKey(AWS_CERT_PRIVATE);
 
+    // Default PubSubClient MQTT buffer is 256 bytes. Presigned S3 URLs are
+    // usually 300-500+ characters, so they get silently truncated without
+    // this. Must be set BEFORE connect().
+    mqttClient.setBufferSize(1024);
+
     mqttClient.setServer(AWS_IOT_ENDPOINT, 8883);
     mqttClient.setCallback(mqttCallback);
 
-    while (!mqttClient.connect("AetherFlash_ESP32")) {
+    // Bounded retry loop instead of an infinite while(). If AWS IoT is
+    // unreachable, setup() will still finish and the rest of the device
+    // (relays, RFID, local OTA server) comes online; handleAWS()/loop()
+    // retries in the background instead of blocking forever.
+    const int MAX_RETRIES = 10;
+    int attempts = 0;
+    while (!mqttClient.connect("AetherFlash_ESP32") && attempts < MAX_RETRIES) {
         Serial.print(".");
+        attempts++;
         delay(1000);
     }
 
     if (mqttClient.connected()) {
         Serial.println("\n✅ AWS IoT Connected Successfully!");
-        sendLogToDashboard("AWS IoT Connected Successfully!"); 
-        
+        sendLogToDashboard("AWS IoT Connected Successfully!");
+
         mqttClient.subscribe(AWS_IOT_TOPIC);
         Serial.println("📡 Subscribed to OTA Topic: " AWS_IOT_TOPIC);
-        sendLogToDashboard("Subscribed to OTA Topic"); 
+        sendLogToDashboard("Subscribed to OTA Topic");
     } else {
-        Serial.println("\n❌ AWS IoT Connection Failed!");
-        sendLogToDashboard("AWS IoT Connection Failed!"); 
+        Serial.println("\n❌ AWS IoT Connection Failed! Will keep retrying in background.");
+        sendLogToDashboard("AWS IoT Connection Failed! Will retry in background.");
     }
 }
 
 void handleAWS() {
+    // If we're not connected (e.g. initial connect() above timed out, or the
+    // link dropped later), keep retrying here instead of leaving AWS dead
+    // for the rest of the device's life.
+    if (!mqttClient.connected()) {
+        static unsigned long lastRetry = 0;
+        if (millis() - lastRetry > 5000) {
+            lastRetry = millis();
+            Serial.println("🔄 Reconnecting to AWS IoT...");
+            if (mqttClient.connect("AetherFlash_ESP32")) {
+                mqttClient.subscribe(AWS_IOT_TOPIC);
+                Serial.println("✅ AWS IoT Reconnected!");
+                sendLogToDashboard("AWS IoT Reconnected");
+            }
+        }
+        return;
+    }
     mqttClient.loop();
 }
 

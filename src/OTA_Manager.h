@@ -1,67 +1,93 @@
 #ifndef OTA_MANAGER_H
 #define OTA_MANAGER_H
 
+#include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <Update.h>
-#include <WiFiClientSecure.h>
 
 extern void sendLogToDashboard(String message);
 
-void performOTAUpdate(String firmwareUrl) {
-    // Start downloading the firmware image from the provided URL.
-    Serial.print("🚀 Starting OTA Download from: ");
-    Serial.println(firmwareUrl);
-    sendLogToDashboard("Downloading Firmware from S3...");
+// NOTE: setupOTA() and handleOTA() were REMOVED from this file.
+// OTA_Handler.h already defines the real setupOTA()/handleOTA() (ElegantOTA
+// web-based local OTA). Having them defined here too caused a
+// "redefinition" compile error, since both headers get included in main.cpp.
+// This file now only handles the S3/AWS firmware download + flash logic.
 
-    WiFiClientSecure secureClient;
-    // Trust the remote HTTPS endpoint without certificate validation.
-    secureClient.setInsecure(); // S3 HTTPS bypass
+// S3 ලින්ක් එකෙන් ඩවුන්ලෝඩ් කරමින්, Rollback පහසුකම සහ Firebase ලොග් සහිත ප්‍රධාන ෆන්ක්ෂන් එක
+void performOTAUpdate(String url) {
+    Serial.println("🚀 Connecting to S3 to download firmware...");
+    sendLogToDashboard("Connecting to S3 to download firmware...");
+
+    WiFiClientSecure client;
+    client.setInsecure(); // ⚠️ SSL Certificate Error මඟහරවා ගැනීමට — see note below
 
     HTTPClient http;
-    // Open the firmware URL over HTTPS.
-    http.begin(secureClient, firmwareUrl);
+    http.begin(client, url);
 
     int httpCode = http.GET();
-    if (httpCode == HTTP_CODE_OK) {
-        int contentLength = http.getSize();
-        bool canBegin = Update.begin(contentLength);
+    if (httpCode > 0) {
+        if (httpCode == HTTP_CODE_OK) {
+            int contentLength = http.getSize();
 
-        if (canBegin) {
-            // Stream the firmware directly into flash memory.
-            Serial.println("Begin Flash... Please wait...");
-            WiFiClient *client = http.getStreamPtr();
-            size_t written = Update.writeStream(*client);
-
-            if (written == contentLength) {
-                Serial.println("✅ Download & Flash Complete!");
-            } else {
-                Serial.println("❌ Flash Failed!");
+            // Fallback: S3 may respond without Content-Length (e.g. chunked
+            // encoding). Without this, Update.begin(-1) can fail silently.
+            if (contentLength <= 0) {
+                Serial.println("⚠️ Content-Length missing/invalid, using UPDATE_SIZE_UNKNOWN");
+                contentLength = UPDATE_SIZE_UNKNOWN;
             }
 
-            if (Update.end()) {
-                if (Update.isFinished()) {
-                    Serial.println("✅ Update successfully completed! Rebooting...");
-                    sendLogToDashboard("✅ OTA Update Successful! Rebooting Now...");
-                    delay(2000);
-                    ESP.restart(); 
+            Serial.printf("📦 Firmware size: %d bytes\n", contentLength);
+            sendLogToDashboard("Firmware size: " + String(contentLength) + " bytes");
+
+            bool canBegin = Update.begin(contentLength);
+            if (canBegin) {
+                Serial.println("🔄 Beginning OTA update. Please wait...");
+                sendLogToDashboard("Beginning OTA update. Please wait...");
+
+                size_t written = Update.writeStream(http.getStream());
+
+                if (contentLength != UPDATE_SIZE_UNKNOWN && written == (size_t)contentLength) {
+                    Serial.printf("Written : %d successfully\n", written);
+                } else if (contentLength == UPDATE_SIZE_UNKNOWN && written > 0) {
+                    Serial.printf("Written : %d bytes (size was unknown)\n", written);
                 } else {
-                    Serial.println("❌ Update not finished!");
-                    sendLogToDashboard("❌ OTA Update Failed (Not Finished)!");
+                    Serial.printf("⚠️ Written only : %d/%d. Retrying...\n", written, contentLength);
+                    sendLogToDashboard("Warning: Partial firmware write (" + String(written) + "/" + String(contentLength) + ")");
+                }
+
+                if (Update.end()) {
+                    Serial.println("✅ OTA completed!");
+                    if (Update.isFinished()) {
+                        Serial.println("🎉 Update successfully completed. Rebooting in 3 seconds...");
+                        sendLogToDashboard("OTA Update Success! Rebooting...");
+                        delay(3000);
+                        ESP.restart(); // සාර්ථක නම් පමණක් Reboot වේ
+                    } else {
+                        Serial.println("❌ Error: OTA not finished properly.");
+                        sendLogToDashboard("Error: OTA not finished properly.");
+                    }
+                } else {
+                    // ✨ Rollback Mechanism: අවුලක් වුණොත් පරණ කේතයම තබා ගනියි
+                    String errNum = String(Update.getError());
+                    Serial.printf("❌ Error Occurred. Error #: %s\n", errNum.c_str());
+                    Serial.println("🛡️ Rolling back to previous stable firmware...");
+                    sendLogToDashboard("OTA Failed (Err: " + errNum + "). Rolling back to stable firmware.");
                 }
             } else {
-                Serial.println("❌ Error Occurred");
-                sendLogToDashboard("❌ OTA Update Error!");
+                Serial.println("❌ Not enough space to begin OTA");
+                sendLogToDashboard("OTA Error: Not enough space to begin update.");
             }
         } else {
-            // Stop if there is not enough flash space for the update.
-            Serial.println("❌ Not enough space to begin OTA");
-            sendLogToDashboard("❌ OTA Failed: Not enough storage!");
+            String errStr = http.errorToString(httpCode);
+            Serial.printf("❌ HTTP GET failed, error: %s\n", errStr.c_str());
+            sendLogToDashboard("OTA HTTP GET failed: " + errStr);
         }
     } else {
-        // Abort when the firmware file cannot be fetched.
-        Serial.println("❌ Cannot download firmware.");
-        sendLogToDashboard("❌ S3 Download Failed.");
+        String errStr = http.errorToString(httpCode);
+        Serial.printf("❌ HTTP connection failed, error: %s\n", errStr.c_str());
+        sendLogToDashboard("OTA HTTP connection failed: " + errStr);
     }
+
     http.end();
 }
 
