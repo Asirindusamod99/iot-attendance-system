@@ -41,4 +41,5 @@ jobs:
         aws iot-data publish \
           --topic "aetherflash/device/Machine_01/ota" \
           --cli-binary-format raw-in-base64-out \
+          --region us-east-1 \
           --payload "https://asirindu-aetherflash-firmware-2026.s3.ap-southeast-1.amazonaws.com/firmware.bin"
