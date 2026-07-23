@@ -8,13 +8,17 @@
 extern void sendLogToDashboard(String message);
 
 void performOTAUpdate(String firmwareUrl) {
-    Serial.println("🚀 Starting OTA Download from: " + firmwareUrl);
+    // Start downloading the firmware image from the provided URL.
+    Serial.print("🚀 Starting OTA Download from: ");
+    Serial.println(firmwareUrl);
     sendLogToDashboard("Downloading Firmware from S3...");
 
     WiFiClientSecure secureClient;
+    // Trust the remote HTTPS endpoint without certificate validation.
     secureClient.setInsecure(); // S3 HTTPS bypass
 
     HTTPClient http;
+    // Open the firmware URL over HTTPS.
     http.begin(secureClient, firmwareUrl);
 
     int httpCode = http.GET();
@@ -23,6 +27,7 @@ void performOTAUpdate(String firmwareUrl) {
         bool canBegin = Update.begin(contentLength);
 
         if (canBegin) {
+            // Stream the firmware directly into flash memory.
             Serial.println("Begin Flash... Please wait...");
             WiFiClient *client = http.getStreamPtr();
             size_t written = Update.writeStream(*client);
@@ -48,10 +53,12 @@ void performOTAUpdate(String firmwareUrl) {
                 sendLogToDashboard("❌ OTA Update Error!");
             }
         } else {
+            // Stop if there is not enough flash space for the update.
             Serial.println("❌ Not enough space to begin OTA");
             sendLogToDashboard("❌ OTA Failed: Not enough storage!");
         }
     } else {
+        // Abort when the firmware file cannot be fetched.
         Serial.println("❌ Cannot download firmware.");
         sendLogToDashboard("❌ S3 Download Failed.");
     }

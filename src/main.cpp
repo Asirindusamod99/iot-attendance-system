@@ -3,7 +3,7 @@
 #include <FirebaseESP32.h>
 #include <time.h>
 
-// 🟢 ඔයාගේ අනිත් Header ෆයිල් ටික
+// Core project headers
 #include "Config.h"
 #include "Sensors.h"
 #include "RFID_Logic.h"
@@ -16,14 +16,14 @@ FirebaseConfig config;
 unsigned long lastSensorUpdate = 0;
 bool isMaintenanceMode = false; 
 
-// 🔴 අර Missing වෙලා තිබ්බ Function එක! (මේක අනිවාර්යයෙන්ම මෙතන තියෙන්න ඕනේ)
+// Sends system logs to the Firebase dashboard.
 void sendLogToDashboard(String message) {
     FirebaseJson json;
     json.set("action", "SYSTEM");
     json.set("name", message);
     json.set("role", "AetherFlash OTA");
     
-    // ඔයා පාවිච්චි කරන FirebaseESP32 ලයිබ්‍රරි එකට අනුව pushJSON කරන විදිහ
+    // Push the log payload using FirebaseESP32.
     if (Firebase.pushJSON(fbData, "/MachineLogs", json)) {
         Serial.println("✅ Log sent to Dashboard");
     } else {
@@ -31,7 +31,7 @@ void sendLogToDashboard(String message) {
     }
 }
 
-// 🟢 Function එක ලිව්වට පස්සේ තමයි AWS IoT Manager එක Include කරන්නේ
+// Include AWS IoT support after the dashboard logger is defined.
 #include "AWS_IoT_Manager.h"
 
 String getCurrentTime() {
@@ -66,7 +66,7 @@ void setup() {
 
     Firebase.setString(fbData, "/MachineStatus/" MACHINE_ID "/State", "IDLE");
     
-    // AWS වලට Connect වීම
+    // Connect to AWS IoT Core.
     connectAWS();
     Serial.println("System Ready!");
 }
@@ -75,13 +75,13 @@ void loop() {
     handleOTA(); 
     handleAWS();
 
-    // Relays Control
+    // Relay control
     if (Firebase.getString(fbData, "/MachineControl/" MACHINE_ID "/Relay1")) controlRelay(1, fbData.stringData() == "ON");
     if (Firebase.getString(fbData, "/MachineControl/" MACHINE_ID "/Relay2")) controlRelay(2, fbData.stringData() == "ON");
     if (Firebase.getString(fbData, "/MachineControl/" MACHINE_ID "/Relay3")) controlRelay(3, fbData.stringData() == "ON");
     if (Firebase.getString(fbData, "/MachineControl/" MACHINE_ID "/Relay4")) controlRelay(4, fbData.stringData() == "ON");
 
-    // Sensors
+    // Periodic sensor updates
     if (millis() - lastSensorUpdate > 10000) {
         float temp = getMachineTemp();
         bool workerHere = isWorkerPresent();
@@ -90,12 +90,12 @@ void loop() {
         lastSensorUpdate = millis();
     }
 
-    // 🔴 RFID Attendance (IN / OUT Logic)
+    // RFID attendance handling (IN / OUT logic)
     String scannedID = getCardID();
     if (scannedID != "") {
         Serial.println("\nCard Scanned: " + scannedID);
 
-        // 1. කාඩ් එක Database එකේ (Root එකේ) තියෙනවද බලනවා
+        // Check whether the card exists in the root of the database.
         if (Firebase.getString(fbData, "/" + scannedID + "/name")) {
             String name = fbData.stringData(); 
             Firebase.getString(fbData, "/" + scannedID + "/role");
@@ -103,7 +103,7 @@ void loop() {
             
             String scanTime = getCurrentTime();
 
-            // 🔴 සේවකයා දැනට ඇතුලෙද (IN) ඉන්නේ කියලා Firebase එකෙන් පරීක්ෂා කිරීම
+            // Check whether the worker is currently marked as IN.
             String currentStatus = "OUT"; 
             if (Firebase.getString(fbData, "/ActiveSessions/" + scannedID + "/status")) {
                 currentStatus = fbData.stringData();
@@ -115,7 +115,7 @@ void loop() {
             log.set("role", role);
             log.set("timestamp", scanTime);
 
-            // 🔴 Technician කෙනෙක් නම්
+            // Technician flow
             if (role == "Technician") {
                 if (!isMaintenanceMode) {
                     isMaintenanceMode = true;
@@ -129,16 +129,16 @@ void loop() {
                     Serial.println("Technician " + name + " ENDED Maintenance.");
                 }
             } 
-            // 🔴 Worker කෙනෙක් නම් (IN / OUT මාරු කිරීම)
+            // Worker flow: toggle between IN and OUT.
             else {
                 if (currentStatus == "OUT" || currentStatus == "") {
-                    // පළවෙනි පාර - පැමිණීම (IN)
+                    // First scan marks arrival (IN).
                     log.set("action", "IN");
                     Firebase.setString(fbData, "/ActiveSessions/" + scannedID + "/status", "IN");
                     Firebase.setString(fbData, "/ActiveSessions/" + scannedID + "/inTime", scanTime);
                     Serial.println("Worker " + name + " Marked: IN at " + scanTime);
                 } else {
-                    // දෙවෙනි පාර - පිටවීම (OUT)
+                    // Second scan marks departure (OUT).
                     log.set("action", "OUT");
                     Firebase.setString(fbData, "/ActiveSessions/" + scannedID + "/status", "OUT");
                     Firebase.setString(fbData, "/ActiveSessions/" + scannedID + "/outTime", scanTime);
@@ -146,16 +146,16 @@ void loop() {
                 }
             }
             
-            // Web UI Logs වලට දත්ත යැවීම
+            // Send the event to the web UI logs.
             Firebase.pushJSON(fbData, "/MachineLogs", log);
             
         } 
-        // 2. Register කරපු නැති අලුත් කාඩ් එකක් නම්
+        // Handle an unregistered card.
         else {
             Serial.println("New Card Detected! Sending to Web UI...");
             Firebase.setString(fbData, "/MachineStatus/" MACHINE_ID "/LastUnknownCard", scannedID);
         }
         
-        delay(2000); // දෙපාරක් එක දිගට කියවීම වැළැක්වීමට
+        delay(2000); // Prevent the card from being read twice in a row.
     }
 }

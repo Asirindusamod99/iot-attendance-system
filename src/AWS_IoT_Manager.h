@@ -12,6 +12,7 @@ PubSubClient mqttClient(net);
 extern void sendLogToDashboard(String message); 
 
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
+    // Handle incoming MQTT messages from AWS IoT Core.
     Serial.print("🔔 AWS IoT Alert! Message arrived on topic: ");
     Serial.println(topic);
     
@@ -24,6 +25,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     Serial.println("Message Content: " + message);
 
     if(String(topic) == AWS_IOT_TOPIC) {
+        // The OTA topic payload contains the firmware URL.
         Serial.println("🚀 Starting OTA Update from AWS S3...");
         sendLogToDashboard("Starting OTA Update from AWS S3..."); 
         
@@ -33,6 +35,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 }
 
 void connectAWS() {
+    // Configure the TLS client and MQTT connection.
     Serial.println("Connecting to AWS IoT Core...");
     sendLogToDashboard("Connecting to AWS IoT Core..."); 
 
@@ -49,6 +52,7 @@ void connectAWS() {
     }
 
     if (mqttClient.connected()) {
+        // Subscribe to the OTA command topic after a successful connection.
         Serial.println("\n✅ AWS IoT Connected Successfully!");
         sendLogToDashboard("AWS IoT Connected Successfully!"); 
         
@@ -62,6 +66,7 @@ void connectAWS() {
 }
 
 void handleAWS() {
+    // Keep the MQTT client processing incoming messages.
     mqttClient.loop();
 }
 

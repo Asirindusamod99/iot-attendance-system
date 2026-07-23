@@ -8,7 +8,7 @@
 DHT dht(DHT_PIN, DHTTYPE);
 
 void setupHardware() {
-    // Relay 4ම OUTPUT කරලා මුලින්ම OFF (LOW) කරලා තියනවා
+    // Configure all relays as outputs and start them in the OFF state.
     pinMode(RELAY_1, OUTPUT); digitalWrite(RELAY_1, LOW);
     pinMode(RELAY_2, OUTPUT); digitalWrite(RELAY_2, LOW);
     pinMode(RELAY_3, OUTPUT); digitalWrite(RELAY_3, LOW);
@@ -28,7 +28,7 @@ bool isWorkerPresent() {
     return digitalRead(PIR_PIN) == HIGH;
 }
 
-// 🔴 අංකය අනුව අදාල Relay එක ON/OFF කිරීමේ අලුත් Function එක
+// Turn the selected relay on or off based on its number.
 void controlRelay(int relayNum, bool state) {
     int pin = RELAY_1;
     if(relayNum == 2) pin = RELAY_2;

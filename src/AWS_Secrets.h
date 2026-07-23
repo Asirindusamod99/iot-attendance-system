@@ -3,13 +3,13 @@
 
 #include <pgmspace.h>
 
-// 🔴 ඔයා කොපි කරගත්ත AWS IoT Endpoint URL එක මෙතනට දාන්න
+// AWS IoT endpoint URL.
 #define AWS_IOT_ENDPOINT "a1inq1bmjtvthc-ats.iot.us-east-1.amazonaws.com"
 
-// මේක තමයි අපේ අලුත් OTA Update එන Topic එක
+// MQTT topic used for OTA update commands.
 #define AWS_IOT_TOPIC "aetherflash/device/Machine_01/ota" 
 
-// 1. Amazon Root CA 1 ෆයිල් එකේ තියෙන ටික මෙතන මැදට Paste කරන්න
+// Amazon Root CA 1 certificate.
 static const char AWS_CERT_CA[] PROGMEM = R"EOF(
 -----BEGIN CERTIFICATE-----
 MIIDQTCCAimgAwIBAgITBmyfz5m/jAo54vB4ikPmljZbyjANBgkqhkiG9w0BAQsF
@@ -33,7 +33,7 @@ rqXRfboQnoZsG4q5WTP468SQvvG5
 -----END CERTIFICATE-----
 )EOF";
 
-// 2. Device Certificate ෆයිල් එකේ තියෙන ටික මෙතන මැදට Paste කරන්න
+// Device certificate.
 static const char AWS_CERT_CRT[] PROGMEM = R"EOF(
 -----BEGIN CERTIFICATE-----
 MIIDWTCCAkGgAwIBAgIUUw/tJiwIJw7Z6bhvSQbkWMSuBsgwDQYJKoZIhvcNAQEL
@@ -57,7 +57,7 @@ zOKv2l2v4peq41EfapTRBJ9CnEDH1cfwRvmVobWNZMGV5z4UTCnjKWOHrw+w
 -----END CERTIFICATE-----
 )EOF";
 
-// 3. Private Key ෆයිල් එකේ තියෙන ටික මෙතන මැදට Paste කරන්න
+// Private key.
 static const char AWS_CERT_PRIVATE[] PROGMEM = R"EOF(
 -----BEGIN RSA PRIVATE KEY-----
 MIIEowIBAAKCAQEApxk7xxo0Gwfq9ycYqvz/Q+10Mx8bgbxiXo/o006yP9oON7Vw

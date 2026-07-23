@@ -8,11 +8,13 @@
 MFRC522 rfid(RFID_SS_PIN, RFID_RST_PIN);
 
 void setupRFID() {
+    // Initialize the SPI bus and RFID reader.
     SPI.begin();
     rfid.PCD_Init();
 }
 
 String getCardID() {
+    // Return an empty string when no new card is available.
     if (!rfid.PICC_IsNewCardPresent() || !rfid.PICC_ReadCardSerial()) {
         return "";
     }
@@ -24,6 +26,7 @@ String getCardID() {
     cardID.toUpperCase();
     rfid.PICC_HaltA();
     rfid.PCD_StopCrypto1();
+    // Normalize the UID so it matches the database format.
     return cardID;
 }
 
