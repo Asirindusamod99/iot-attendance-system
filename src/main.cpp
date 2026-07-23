@@ -47,7 +47,7 @@ void setup() {
 
     setupHardware();
     setupRFID();
-
+     pinMode(2, OUTPUT);
     Serial.print("Connecting to WiFi");
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     while (WiFi.status() != WL_CONNECTED) {
@@ -74,7 +74,7 @@ void setup() {
 void loop() {
     handleOTA(); 
     handleAWS();
-
+    digitalWrite(2, HIGH);  
     // Relay control
     if (Firebase.getString(fbData, "/MachineControl/" MACHINE_ID "/Relay1")) controlRelay(1, fbData.stringData() == "ON");
     if (Firebase.getString(fbData, "/MachineControl/" MACHINE_ID "/Relay2")) controlRelay(2, fbData.stringData() == "ON");
