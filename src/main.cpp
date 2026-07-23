@@ -64,7 +64,10 @@ void setup() {
     Firebase.begin(&config, &auth);
     Firebase.reconnectWiFi(true);
 
+    // Machine State සහ Firmware Version එක Firebase වෙත යැවීම
     Firebase.setString(fbData, "/MachineStatus/" MACHINE_ID "/State", "IDLE");
+    Firebase.setString(fbData, "/MachineStatus/" MACHINE_ID "/FirmwareVersion", FIRMWARE_VERSION);
+    Serial.println("📌 Current Firmware Version Reported to Firebase: " + String(FIRMWARE_VERSION));
     
     // Connect to AWS IoT Core.
     connectAWS();
@@ -145,13 +148,16 @@ void loop() {
                 }
             }
             
+            // Send the event to the web UI logs.
             Firebase.pushJSON(fbData, "/MachineLogs", log);
+            
         } 
+        // Handle an unregistered card.
         else {
             Serial.println("New Card Detected! Sending to Web UI...");
             Firebase.setString(fbData, "/MachineStatus/" MACHINE_ID "/LastUnknownCard", scannedID);
         }
         
-        delay(2000); 
+        delay(2000); // Prevent the card from being read twice in a row.
     }
 }

@@ -1,6 +1,9 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+// Firmware Version definition for Web UI / Firebase tracking
+#define FIRMWARE_VERSION "1.01"
+
 // Wi-Fi credentials.
 #define WIFI_SSID "SLT-4G_164B2A"
 #define WIFI_PASSWORD "B55F9EED"
