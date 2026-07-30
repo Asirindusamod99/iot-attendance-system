@@ -15,80 +15,109 @@ extern void sendLogToDashboard(String message);
 
 // S3 ලින්ක් එකෙන් ඩවුන්ලෝඩ් කරමින්, Rollback පහසුකම සහ Firebase ලොග් සහිත ප්‍රධාන ෆන්ක්ෂන් එක
 void performOTAUpdate(String url) {
-    Serial.println("🚀 Connecting to S3 to download firmware...");
+
+    Serial.println("======================================");
+    Serial.println("🚀 OTA Update Started");
+    Serial.println("======================================");
+
     sendLogToDashboard("Connecting to S3 to download firmware...");
 
     WiFiClientSecure client;
-    client.setInsecure(); // ⚠️ SSL Certificate Error මඟහරවා ගැනීමට — see note below
+    client.setInsecure();
 
     HTTPClient http;
-    http.begin(client, url);
 
-    int httpCode = http.GET();
-    if (httpCode > 0) {
-        if (httpCode == HTTP_CODE_OK) {
-            int contentLength = http.getSize();
-
-            // Fallback: S3 may respond without Content-Length (e.g. chunked
-            // encoding). Without this, Update.begin(-1) can fail silently.
-            if (contentLength <= 0) {
-                Serial.println("⚠️ Content-Length missing/invalid, using UPDATE_SIZE_UNKNOWN");
-                contentLength = UPDATE_SIZE_UNKNOWN;
-            }
-
-            Serial.printf("📦 Firmware size: %d bytes\n", contentLength);
-            sendLogToDashboard("Firmware size: " + String(contentLength) + " bytes");
-
-            bool canBegin = Update.begin(contentLength);
-            if (canBegin) {
-                Serial.println("🔄 Beginning OTA update. Please wait...");
-                sendLogToDashboard("Beginning OTA update. Please wait...");
-
-                size_t written = Update.writeStream(http.getStream());
-
-                if (contentLength != UPDATE_SIZE_UNKNOWN && written == (size_t)contentLength) {
-                    Serial.printf("Written : %d successfully\n", written);
-                } else if (contentLength == UPDATE_SIZE_UNKNOWN && written > 0) {
-                    Serial.printf("Written : %d bytes (size was unknown)\n", written);
-                } else {
-                    Serial.printf("⚠️ Written only : %d/%d. Retrying...\n", written, contentLength);
-                    sendLogToDashboard("Warning: Partial firmware write (" + String(written) + "/" + String(contentLength) + ")");
-                }
-
-                if (Update.end()) {
-                    Serial.println("✅ OTA completed!");
-                    if (Update.isFinished()) {
-                        Serial.println("🎉 Update successfully completed. Rebooting in 3 seconds...");
-                        sendLogToDashboard("OTA Update Success! Rebooting...");
-                        delay(3000);
-                        ESP.restart(); // සාර්ථක නම් පමණක් Reboot වේ
-                    } else {
-                        Serial.println("❌ Error: OTA not finished properly.");
-                        sendLogToDashboard("Error: OTA not finished properly.");
-                    }
-                } else {
-                    // ✨ Rollback Mechanism: අවුලක් වුණොත් පරණ කේතයම තබා ගනියි
-                    String errNum = String(Update.getError());
-                    Serial.printf("❌ Error Occurred. Error #: %s\n", errNum.c_str());
-                    Serial.println("🛡️ Rolling back to previous stable firmware...");
-                    sendLogToDashboard("OTA Failed (Err: " + errNum + "). Rolling back to stable firmware.");
-                }
-            } else {
-                Serial.println("❌ Not enough space to begin OTA");
-                sendLogToDashboard("OTA Error: Not enough space to begin update.");
-            }
-        } else {
-            String errStr = http.errorToString(httpCode);
-            Serial.printf("❌ HTTP GET failed, error: %s\n", errStr.c_str());
-            sendLogToDashboard("OTA HTTP GET failed: " + errStr);
-        }
-    } else {
-        String errStr = http.errorToString(httpCode);
-        Serial.printf("❌ HTTP connection failed, error: %s\n", errStr.c_str());
-        sendLogToDashboard("OTA HTTP connection failed: " + errStr);
+    if (!http.begin(client, url)) {
+        Serial.println("❌ HTTP begin failed");
+        return;
     }
 
+    int httpCode = http.GET();
+
+    if (httpCode != HTTP_CODE_OK) {
+        Serial.printf("❌ HTTP Error : %d\n", httpCode);
+        Serial.println(http.errorToString(httpCode));
+        http.end();
+        return;
+    }
+
+    int contentLength = http.getSize();
+
+    if (contentLength <= 0) {
+        Serial.println("⚠️ Unknown content length");
+        contentLength = UPDATE_SIZE_UNKNOWN;
+    }
+
+    Serial.printf("Firmware Size      : %d\n", contentLength);
+    Serial.printf("Sketch Size        : %u\n", ESP.getSketchSize());
+    Serial.printf("Free Sketch Space  : %u\n", ESP.getFreeSketchSpace());
+
+    sendLogToDashboard("Firmware size: " + String(contentLength));
+
+    if (!Update.begin(contentLength)) {
+
+        Serial.println("======================================");
+        Serial.println("❌ Update.begin FAILED");
+        Serial.printf("Error Code : %d\n", Update.getError());
+        Serial.printf("Error      : %s\n", Update.errorString());
+        Serial.println("======================================");
+
+        http.end();
+        return;
+    }
+
+    Serial.println("✅ Update.begin OK");
+
+    WiFiClient *stream = http.getStreamPtr();
+
+    size_t written = Update.writeStream(*stream);
+
+    Serial.println("--------------------------------------");
+    Serial.printf("Bytes Written : %u\n", written);
+    Serial.printf("Update Error  : %d\n", Update.getError());
+    Serial.printf("Error String  : %s\n", Update.errorString());
+    Serial.println("--------------------------------------");
+
+    if (written != (size_t)contentLength &&
+        contentLength != UPDATE_SIZE_UNKNOWN) {
+
+        Serial.println("⚠️ Firmware not fully written");
+    }
+
+    if (!Update.end()) {
+
+        Serial.println("======================================");
+        Serial.println("❌ Update.end FAILED");
+        Serial.printf("Error Code : %d\n", Update.getError());
+        Serial.printf("Error      : %s\n", Update.errorString());
+        Serial.println("🛡️ Rolling Back...");
+        Serial.println("======================================");
+
+        sendLogToDashboard("OTA Failed");
+
+        http.end();
+        return;
+    }
+
+    if (!Update.isFinished()) {
+
+        Serial.println("❌ OTA Not Finished");
+        http.end();
+        return;
+    }
+
+    Serial.println("======================================");
+    Serial.println("🎉 OTA SUCCESS");
+    Serial.println("Restarting...");
+    Serial.println("======================================");
+
+    sendLogToDashboard("OTA Success");
+
     http.end();
+
+    delay(3000);
+
+    ESP.restart();
 }
 
 #endif
