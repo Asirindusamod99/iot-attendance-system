@@ -14,8 +14,11 @@ FirebaseData fbData;
 FirebaseAuth auth;
 FirebaseConfig config;
 
+const int LED_PIN = 2;
 unsigned long lastSensorUpdate = 0;
+unsigned long lastLedToggle = 0;
 bool isMaintenanceMode = false;
+bool ledState = true;
 
 // Sends system logs to the Firebase dashboard.
 void sendLogToDashboard(String message) {
@@ -47,7 +50,8 @@ void setup() {
 
     setupHardware();
     setupRFID();
-    pinMode(2, OUTPUT);
+    pinMode(LED_PIN, OUTPUT);
+    digitalWrite(LED_PIN, HIGH);
     Serial.print("Connecting to WiFi");
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     while (WiFi.status() != WL_CONNECTED) {
@@ -87,7 +91,12 @@ void setup() {
 void loop() {
     handleOTA();
     handleAWS();
-    digitalWrite(2, HIGH);
+
+    if (millis() - lastLedToggle >= 500) {
+        ledState = !ledState;
+        digitalWrite(LED_PIN, ledState ? HIGH : LOW);
+        lastLedToggle = millis();
+    }
 
     // Relay control
     if (Firebase.getString(fbData, "/MachineControl/" MACHINE_ID "/Relay1")) controlRelay(1, fbData.stringData() == "ON");
