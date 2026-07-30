@@ -46,10 +46,11 @@ void connectAWS() {
     net.setCertificate(AWS_CERT_CRT);
     net.setPrivateKey(AWS_CERT_PRIVATE);
 
-    // Default PubSubClient MQTT buffer is 256 bytes. Presigned S3 URLs are
-    // usually 300-500+ characters, so they get silently truncated without
-    // this. Must be set BEFORE connect().
-    mqttClient.setBufferSize(1024);
+    // Default PubSubClient MQTT buffer is 256 bytes. Presigned S3 URLs
+    // (especially with temporary credentials / X-Amz-Security-Token) can
+    // run 600-1200+ characters, so they get silently truncated without a
+    // large enough buffer. Must be set BEFORE connect().
+    mqttClient.setBufferSize(2048);  // 1024 → 2048
 
     mqttClient.setServer(AWS_IOT_ENDPOINT, 8883);
     mqttClient.setCallback(mqttCallback);

@@ -54,6 +54,44 @@ void performOTAUpdate(String url) {
 
     sendLogToDashboard("Firmware size: " + String(contentLength));
 
+    // 🔍 Sanity check: peek at the first byte BEFORE writing anything to
+    // flash. A valid ESP32 app image always starts with magic byte 0xE9.
+    // If it's not there, this isn't real firmware — likely an S3 error
+    // page (AccessDenied XML, expired signature, etc) or a truncated URL
+    // caused by the MQTT buffer being too small.
+    WiFiClient *stream = http.getStreamPtr();
+
+    // Give the stream a moment to buffer the first byte if needed
+    unsigned long peekStart = millis();
+    while (!stream->available() && millis() - peekStart < 3000) {
+        delay(10);
+    }
+
+    int firstByte = stream->peek();
+    Serial.printf("🔍 First byte from S3: 0x%02X (expected 0xE9)\n", firstByte);
+
+    if (firstByte != 0xE9) {
+        Serial.println("======================================");
+        Serial.println("❌ Response is NOT valid firmware!");
+        Serial.println("   Likely an S3 error page, expired presigned URL,");
+        Serial.println("   or truncated MQTT payload.");
+        Serial.println("======================================");
+
+        // Read a bit of the body as text so you can see the actual error
+        // (e.g. <Error><Code>AccessDenied</Code>...)
+        String preview = "";
+        int count = 0;
+        while (stream->available() && count < 300) {
+            preview += (char)stream->read();
+            count++;
+        }
+        Serial.println("Body preview: " + preview);
+
+        sendLogToDashboard("OTA Failed: Invalid firmware response (not 0xE9)");
+        http.end();
+        return;
+    }
+
     if (!Update.begin(contentLength)) {
 
         Serial.println("======================================");
@@ -67,8 +105,6 @@ void performOTAUpdate(String url) {
     }
 
     Serial.println("✅ Update.begin OK");
-
-    WiFiClient *stream = http.getStreamPtr();
 
     size_t written = Update.writeStream(*stream);
 
