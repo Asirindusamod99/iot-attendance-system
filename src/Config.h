@@ -2,7 +2,7 @@
 #define CONFIG_H
 
 // Firmware Version definition for Web UI / Firebase tracking
-#define FIRMWARE_VERSION "1.02"
+#define FIRMWARE_VERSION "1.03"
 
 // Wi-Fi credentials.
 // ⚠️ TODO: rotate this password and move it out of source control
